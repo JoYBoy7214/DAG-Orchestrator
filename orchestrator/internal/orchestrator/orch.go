@@ -12,6 +12,7 @@ import (
 	"github.com/JoYBoy7214/swarm-orchestrator/internal/jet_stream"
 	"github.com/JoYBoy7214/swarm-orchestrator/internal/storage/postgresDb"
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -24,6 +25,16 @@ type tempschema struct {
 	WorkFlow_id uuid.UUID `json:"Workflow_id"`
 	Task_id     uuid.UUID `json:"Task_id"`
 	Task_type   string    `json:"Task_type"`
+}
+
+type MaxDeliverAdvisory struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	Timestamp  string `json:"timestamp"`
+	Stream     string `json:"stream"`
+	Consumer   string `json:"consumer"`
+	StreamSeq  uint64 `json:"stream_seq"`
+	Deliveries int    `json:"deliveries"`
 }
 
 func CreateOrchestrator(ctx context.Context, DbString string, natsUrl string) (*Orchestrator, error) {
@@ -49,12 +60,23 @@ func (orch *Orchestrator) StartOrchestrating(ctx context.Context) {
 		AckPolicy:     jetstream.AckExplicitPolicy,
 	})
 	if err != nil {
-		log.Fatal("Error in creating consumers")
+		log.Fatalf("Error in creating complete update consumer %w", err)
 	}
+
+	if err != nil {
+		log.Fatalf("Error in creating fail check consumer %w", err)
+	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		orch.pullConsumer(ctx, consumer)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		orch.failCheckPullConsumer(ctx)
 	}()
 	<-ctx.Done()
 	wg.Wait()
@@ -139,6 +161,97 @@ func (orch *Orchestrator) pullConsumer(ctx context.Context, consumer jetstream.C
 
 }
 
+func (orch *Orchestrator) failCheckPullConsumer(ctx context.Context) {
+	//to handle the failed tasks
+	advisorySubject := "$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.>"
+
+	// 1. Worker queue to avoid unbounded goroutine creation
+	const maxWorkers = 10
+	taskCh := make(chan MaxDeliverAdvisory, 1000)
+	var workerWg sync.WaitGroup
+
+	// Start bounded workers
+	for i := 0; i < maxWorkers; i++ {
+		workerWg.Add(1)
+		go func() {
+			defer workerWg.Done()
+			for adv := range taskCh {
+				orch.processMaxDeliveryAdvisory(adv)
+			}
+		}()
+	}
+
+	// 2. Subscribe to advisories
+	sub, err := orch.StreamHandler.Nats.Subscribe(advisorySubject, func(msg *nats.Msg) {
+		var adv MaxDeliverAdvisory
+		if err := json.Unmarshal(msg.Data, &adv); err != nil {
+			log.Printf("Failed to unmarshal advisory: %v", err)
+			return
+		}
+
+		// Push to worker queue (non-blocking fallback or block until queue clears)
+		select {
+		case taskCh <- adv:
+		default:
+			log.Printf("[Warning] Advisory queue full. Backpressure dropping/waiting on seq: %d", adv.StreamSeq)
+			taskCh <- adv // Or block if dropping is unacceptable
+		}
+	})
+	if err != nil {
+		log.Printf("Error in creating fail check nats subscriber: %v", err)
+		close(taskCh)
+		workerWg.Wait()
+		return
+	}
+
+	// 3. Block until context cancellation
+	<-ctx.Done()
+	log.Println("Shutting down fail-check advisory listener...")
+
+	// 4. Drain the subscription first: stops incoming messages and processes pending
+	if err := sub.Drain(); err != nil {
+		log.Printf("Error draining advisory subscription: %v", err)
+	}
+
+	// 5. Safely close task channel and wait for workers to exit cleanly
+	close(taskCh)
+	workerWg.Wait()
+	log.Println("All fail-check worker tasks finished.")
+}
+
+func (orch *Orchestrator) processMaxDeliveryAdvisory(adv MaxDeliverAdvisory) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := orch.StreamHandler.Jstream.Stream(ctx, adv.Stream)
+	if err != nil {
+		log.Printf("Failed to get stream %s: %v", adv.Stream, err)
+		return
+	}
+
+	rawMsg, err := stream.GetMsg(ctx, adv.StreamSeq)
+	if err != nil {
+		log.Printf("Failed to get message seq %d: %v", adv.StreamSeq, err)
+		return
+	}
+
+	var temp tempschema
+	if err := json.Unmarshal(rawMsg.Data, &temp); err != nil {
+		log.Printf("Failed to unmarshal raw data: %v", err)
+		return
+	}
+	log.Printf("Failed to do the task: %s", temp.Task_type)
+	if err := orch.DbDriver.UpdateTask(ctx, temp.Task_id, temp.WorkFlow_id, "FAILED"); err != nil {
+		log.Printf("Failed to update task status: %v", err)
+		return
+	}
+
+	if err := orch.DbDriver.UpdateWorkflowStatus(ctx, temp.WorkFlow_id, "FAILED"); err != nil {
+		log.Printf("Failed to update workflow status: %v", err)
+		return
+	}
+}
+
 func (orch *Orchestrator) bulkPublisher(ctx context.Context, tasks []uuid.UUID, workflow_id uuid.UUID, task_type string) error {
 	for _, task := range tasks {
 		msg := tempschema{
@@ -195,7 +308,7 @@ func (orch *Orchestrator) BackgroundSweeper(ctx context.Context) {
 			processContext, processcontextCancel := context.WithTimeout(context.Background(), 1*time.Second)
 			result, err := orch.DbDriver.GetAllReadyLongLivedTasks(processContext)
 			processcontextCancel()
-			log.Printf("Background Sweeper Running %i", len(result))
+			log.Printf("Background Sweeper Running %d", len(result))
 			if err != nil {
 				log.Println("Error in background sweeper while getting the long lived task, ERROR: %w", err)
 				continue

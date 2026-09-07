@@ -26,17 +26,30 @@ func CreateGraph() *Graph {
 	g.createNode("E")
 	g.createNode("F")
 	g.createNode("G")
+	g.createNode("H")
+	g.createNode("I")
+	g.createNode("J")
 
 	return &g
 }
 
 func (g *Graph) HardCodeIt() {
 	g.addEdge("A", "C")
-	g.addEdge("B", "C")
-	g.addEdge("C", "D")
-	g.addEdge("E", "D")
-	g.addEdge("G", "A")
-	g.addEdge("G", "B")
+	g.addEdge("A", "D")
+	g.addEdge("B", "D")
+	g.addEdge("B", "G")
+	g.addEdge("C", "E")
+	g.addEdge("C", "F")
+	g.addEdge("D", "F")
+	g.addEdge("D", "G")
+	g.addEdge("E", "H")
+	g.addEdge("E", "J")
+	g.addEdge("F", "H")
+	g.addEdge("F", "I")
+	g.addEdge("G", "I")
+	g.addEdge("G", "J")
+	g.addEdge("H", "J")
+	g.addEdge("I", "J")
 }
 
 func (g *Graph) createNode(name string) {

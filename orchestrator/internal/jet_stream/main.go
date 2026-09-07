@@ -11,7 +11,7 @@ import (
 
 type JetStreamHandler struct {
 	Jstream jetstream.JetStream
-	nats    *nats.Conn
+	Nats    *nats.Conn
 }
 
 func CreateJetStreamHandler(ctx context.Context, natUrl string) (*JetStreamHandler, error) {
@@ -31,7 +31,7 @@ func CreateJetStreamHandler(ctx context.Context, natUrl string) (*JetStreamHandl
 	})
 	return &JetStreamHandler{
 		Jstream: js,
-		nats:    nc,
+		Nats:    nc,
 	}, err
 }
 
@@ -52,10 +52,11 @@ func (p *JetStreamHandler) Publish(ctx context.Context, message []byte, subject 
 		return fmt.Errorf("Error in publishing message %w", err)
 	}
 	log.Printf("Message published to %s. Sequence: %d", pAck.Stream, pAck.Sequence)
+
 	return nil
 }
 
 func (p *JetStreamHandler) GraceFullShutdown() {
 	p.Jstream.Conn().Close()
-	p.nats.Close()
+	p.Nats.Close()
 }

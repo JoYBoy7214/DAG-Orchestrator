@@ -54,29 +54,6 @@ func main() {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
-	// mux.HandleFunc("GET /api/v1/tasks/{task_id}", func(w http.ResponseWriter, r *http.Request) {
-	// 	w.Header().Set("content-type", "application/json")
-	// 	var req storage.Tempschema
-	// 	err := json.NewDecoder(r.Body).Decode(&req)
-	// 	if err != nil {
-	// 		log.Println("Error in decoding request %w", err)
-	// 		http.Error(w, "Error in decoding request", http.StatusBadRequest)
-	// 		return
-	// 	}
-
-	// 	ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
-	// 	defer cancel()
-	// 	result, err := orch.DbDriver.GetTaskStatus(ctx, req.Task_id)
-	// 	if err != nil {
-	// 		log.Println("Error in getting task %w", err)
-	// 		http.Error(w, "Error in getting task", http.StatusInternalServerError)
-	// 		return
-	// 	}
-
-	// 	json.NewEncoder(w).Encode(result)
-
-	// })
-
 	mux.HandleFunc("PATCH /api/v1/tasks/{task_id}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		var req storage.Tempschema

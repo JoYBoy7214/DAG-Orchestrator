@@ -178,30 +178,6 @@ func (pd *PostgresDriver) Evaluate(ctx context.Context, workflow_id uuid.UUID) (
 	return ready_list, nil
 }
 
-// func (pd *PostgresDriver) GetworkflowReadyTasks(ctx context.Context, workflow_id uuid.UUID) (error, []uuid.UUID) {
-// 	query_string := `
-// 	select task_id from tasks where workflow_id=$1 and status='READY'
-// 	`
-// 	rows, err := pd.pool.Query(ctx, query_string, workflow_id)
-// 	if err != nil {
-// 		return fmt.Errorf("Error in executing command to get ready task %w", err), nil
-// 	}
-// 	defer rows.Close()
-// 	var ready_list []uuid.UUID
-// 	for rows.Next() {
-// 		var temp uuid.UUID
-// 		if err := rows.Scan(&temp); err != nil {
-// 			return fmt.Errorf("Error in scanning the rows %w", err), nil
-// 		}
-// 		ready_list = append(ready_list, temp)
-// 	}
-// 	if rows.Err() != nil {
-// 		return fmt.Errorf("Error in iterating the rows %w", err), nil
-// 	}
-
-// 	return nil, ready_list
-// }
-
 func (pd *PostgresDriver) UpdateTask(ctx context.Context, task_id uuid.UUID, workflow_id uuid.UUID, status string) error {
 	cur_time := time.Now().UTC()
 	query_string := `
@@ -285,6 +261,20 @@ func (pd PostgresDriver) StatusCheckForIdempotency(ctx context.Context, taskID u
 	}
 
 	return true, nil // Successfully claimed
+}
+
+func (pd *PostgresDriver) UpdateWorkflowStatus(ctx context.Context, workflow_id uuid.UUID, status string) error {
+	cur_time := time.Now().UTC()
+	query_string := `
+	update workflow
+	set status =$1,updated_at =$3
+	where workflow_id=$2 
+	`
+	_, err := pd.pool.Exec(ctx, query_string, status, workflow_id, cur_time)
+	if err != nil {
+		return fmt.Errorf("Error in updating the workflow status %w", err)
+	}
+	return nil
 }
 
 func (pd *PostgresDriver) TesttempGettingInfo(ctx context.Context, workflow_id uuid.UUID) ([]Temp, error) {

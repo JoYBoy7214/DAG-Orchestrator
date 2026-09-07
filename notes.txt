@@ -6,3 +6,7 @@ message in queue but since the status is changed to "RUNNING" next work will sim
 solution: for now we can let the background sweeper to take care of the pushing the task again in the stream once again it will check for the task which are 
 int READY or RUNNING State for more than 1 min and push it into the stream and we have to make sure it will update the RUNNING state to READY state so worker 
 won't skip it in idempotency check
+
+07/09/2026
+
+idempotency issue is resloved ig with tha above solution
