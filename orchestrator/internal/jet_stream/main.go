@@ -35,17 +35,6 @@ func CreateJetStreamHandler(ctx context.Context, natUrl string) (*JetStreamHandl
 	}, err
 }
 
-// func CreateStream(ctx context.Context, streamName string, subject string) error {
-// 	_, err := p.Jstream.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-// 		Name:     streamName,
-// 		Subjects: []string{subject},
-// 	})
-// 	if err != nil {
-// 		return fmt.Errorf("Error in creating stream %s, Error :%w", streamName, err)
-// 	}
-// 	return err
-// }
-
 func (p *JetStreamHandler) Publish(ctx context.Context, message []byte, subject string) error {
 	pAck, err := p.Jstream.Publish(ctx, subject, message)
 	if err != nil {

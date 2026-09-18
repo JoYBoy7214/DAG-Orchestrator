@@ -277,6 +277,24 @@ func (pd *PostgresDriver) UpdateWorkflowStatus(ctx context.Context, workflow_id 
 	return nil
 }
 
+func (pd *PostgresDriver) DeleteWorkflow(ctx context.Context, workflow_id uuid.UUID) error {
+	err := pd.UpdateWorkflowStatus(ctx, workflow_id, "DELETED")
+	if err != nil {
+		return fmt.Errorf("Error in deleting workflow %w", err)
+	}
+	cur_time := time.Now().UTC()
+	query_string := `
+	update tasks
+	set status =$1,updated_at =$3
+	where workflow_id=$2 and status != 'COMPLETED'
+	`
+	_, err = pd.pool.Exec(ctx, query_string, "DELETED", workflow_id, cur_time)
+	if err != nil {
+		return fmt.Errorf("Error in updating the task status %w", err)
+	}
+	return nil
+}
+
 func (pd *PostgresDriver) TesttempGettingInfo(ctx context.Context, workflow_id uuid.UUID) ([]Temp, error) {
 	var result []Temp
 	query_string := "select task_id,task_type,status from tasks where workflow_id =$1"

@@ -27,6 +27,10 @@ type tempschema struct {
 	Task_type   string    `json:"Task_type"`
 }
 
+type cancelWorkflowSchema struct {
+	WorkFlow_id uuid.UUID `json:"Workflow_id"`
+}
+
 type MaxDeliverAdvisory struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
@@ -134,7 +138,7 @@ func (orch *Orchestrator) pullConsumer(ctx context.Context, consumer jetstream.C
 						return
 					}
 
-					err = orch.testTempLogger(processContext, workflow_id)
+					err = orch.TestTempLogger(processContext, workflow_id)
 					if err != nil {
 						log.Println("Error in logging the states %w", err)
 					}
@@ -281,7 +285,7 @@ func (orch *Orchestrator) RootNodeUpdater(ctx context.Context, workflow_id uuid.
 		return fmt.Errorf("Error in Evaluating Root DAG error: %w", err)
 	}
 
-	err = orch.testTempLogger(ctx, workflow_id)
+	err = orch.TestTempLogger(ctx, workflow_id)
 	if err != nil {
 		log.Println("Error in logging the states %w", err)
 	}
@@ -328,7 +332,30 @@ func (orch *Orchestrator) BackgroundSweeper(ctx context.Context) {
 	}
 }
 
-func (orch *Orchestrator) testTempLogger(ctx context.Context, workflowID uuid.UUID) error {
+func (orch *Orchestrator) CancelWorkflowHandler(ctx context.Context, workflow_id uuid.UUID) error {
+	subject := "task.CANCEL." + workflow_id.String()
+	var cancelSchema cancelWorkflowSchema
+	cancelSchema.WorkFlow_id = workflow_id
+	msgByte, err := json.Marshal(cancelSchema)
+	if err != nil {
+		return fmt.Errorf("Error in marshalling cancel workflow schema %w", err)
+	}
+
+	err = orch.StreamHandler.Nats.Publish(subject, msgByte)
+	if err != nil {
+		return fmt.Errorf("Error in publishing cancel workflow message %w", err)
+	}
+	log.Printf("Cancel workflow message published for workflow_id: %s", workflow_id.String())
+
+	err = orch.DbDriver.DeleteWorkflow(ctx, workflow_id)
+	if err != nil {
+		return fmt.Errorf("Error in deleting workflow %w", err)
+	}
+
+	return nil
+}
+
+func (orch *Orchestrator) TestTempLogger(ctx context.Context, workflowID uuid.UUID) error {
 	tasksInfo, err := orch.DbDriver.TesttempGettingInfo(ctx, workflowID)
 	if err != nil {
 		log.Println("iteration: failed to get task info: %v", err)

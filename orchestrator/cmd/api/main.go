@@ -14,8 +14,42 @@ import (
 
 	"github.com/JoYBoy7214/swarm-orchestrator/internal/orchestrator"
 	"github.com/JoYBoy7214/swarm-orchestrator/internal/storage"
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 )
+
+type workflowResponse struct {
+	WorkflowID uuid.UUID `json:"workflow_id"`
+}
+
+func deleteWorkflowHander(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orchestrator) {
+	w.Header().Set("content-type", "application/json")
+	workflow_id := r.URL.Path[len("/api/v1/tasks/"):]
+	if workflow_id == "" {
+		log.Println("Error in deleting workflow, workflow_id is empty")
+		http.Error(w, "Error in deleting workflow, workflow_id is empty", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	uuidWorkflowId, err := uuid.Parse(workflow_id)
+	if err != nil {
+		log.Println("Error in parsing workflow_id %w", err)
+		http.Error(w, "Error in parsing workflow_id", http.StatusBadRequest)
+		return
+	}
+	err = orch.CancelWorkflowHandler(ctx, uuidWorkflowId)
+	if err != nil {
+		log.Println("Error in canceling workflow %w", err)
+		http.Error(w, "Error in canceling workflow", http.StatusInternalServerError)
+		return
+	}
+	err = orch.TestTempLogger(ctx, uuidWorkflowId)
+	if err != nil {
+		log.Println("Error in logging the states %w", err)
+	}
+	w.WriteHeader(http.StatusOK)
+}
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -51,7 +85,10 @@ func main() {
 			http.Error(w, "Error in creating workflow", http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusAccepted)
+		var response workflowResponse
+		response.WorkflowID = workflow_id
+		json.NewEncoder(w).Encode(response)
+
 	})
 
 	mux.HandleFunc("PATCH /api/v1/tasks/{task_id}", func(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +113,13 @@ func main() {
 			http.Error(w, "Error task is already running", http.StatusConflict)
 			return
 		}
+
 		w.WriteHeader(http.StatusOK)
+	})
+
+	mux.HandleFunc("DELETE /api/v1/tasks/{workflow_id}", func(w http.ResponseWriter, r *http.Request) {
+		deleteWorkflowHander(w, r, orch)
+
 	})
 
 	srv := &http.Server{

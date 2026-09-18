@@ -10,3 +10,17 @@ won't skip it in idempotency check
 07/09/2026
 
 idempotency issue is resloved ig with tha above solution
+
+18/09/2026
+
+Why to create separate cancel task listener for each worker why not a single centralized worker won't do the work?
+
+For a centralized worker we need to keep a centralized dictionary perfectly in sync which is hard(not as hard Go becasue of python's GLI) and a can become single point of failure for cancel events
+and also note a background task is simpler than centralized worker
+
+Things I observed about python's concurrency
+
+cancel_task=asyncio.create_task(cancel_listener(nats, stop_event,current_task,workflow_map))
+
+This only schedule the cancel_task in the background,(unlike Go it won't start it immediately) won't start it immediately if we didn't reference it somewhere in the same scope it will be cleaned by the garbage collector  
+so I used  await asyncio.gather(cancel_task, return_exceptions=True) to make a strong reference 
