@@ -114,7 +114,7 @@ func (orch *Orchestrator) pullConsumer(ctx context.Context, consumer jetstream.C
 				wg.Add(1)
 				go func(m jetstream.Msg) {
 					//don't tie root context to goroutines since if the root context dies the all child ctx also dies
-					//so here DB calls and publisher will throw context canceled error even we provide time to shutdown gracfully
+					//so here DB calls and publisher will throw context canceled error even we provide time to shutdown gracefully
 					processContext, processcontextCancel := context.WithTimeout(context.Background(), 3*time.Second)
 					defer processcontextCancel()
 					defer wg.Done()
