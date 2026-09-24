@@ -276,21 +276,53 @@ func (pd *PostgresDriver) UpdateWorkflowStatus(ctx context.Context, workflow_id 
 	}
 	return nil
 }
+func (pd *PostgresDriver) UpdateWorkflowCompletionStatus(ctx context.Context, workflow_id uuid.UUID) (bool, error) {
+	cur_time := time.Now().UTC()
+	query_string := `
+	UPDATE workflow SET status='COMPLETED', updated_at=$2
+WHERE workflow_id=$1 AND status NOT IN ('CANCELLED','COMPLETED')`
+	pg_tag, err := pd.pool.Exec(ctx, query_string, workflow_id, cur_time)
+	if err != nil {
+		return false, fmt.Errorf("Error in updating the workflow status %w", err)
+	}
+	return pg_tag.RowsAffected() > 0, nil
+}
 
 func (pd *PostgresDriver) DeleteWorkflow(ctx context.Context, workflow_id uuid.UUID) error {
-	err := pd.UpdateWorkflowStatus(ctx, workflow_id, "CANCELLED")
-	if err != nil {
-		return fmt.Errorf("Error in deleting workflow %w", err)
-	}
 	cur_time := time.Now().UTC()
+	tx, err := pd.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("Error in creating Transaction connection %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	workflow_query_string := `UPDATE workflow
+SET status = 'CANCELLED', updated_at = $2
+WHERE workflow_id = $1
+  AND status NOT IN ('COMPLETED', 'CANCELLED')
+RETURNING status;`
+
+	tag, err := tx.Exec(ctx, workflow_query_string, workflow_id, cur_time)
+	if err != nil {
+		return fmt.Errorf("Error in updating the workflow status %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		return tx.Commit(ctx)
+	}
+
 	query_string := `
 	update tasks
 	set status =$1,updated_at =$3
 	where workflow_id=$2 and status != 'COMPLETED'
 	`
-	_, err = pd.pool.Exec(ctx, query_string, "CANCELLED", workflow_id, cur_time)
+	_, err = tx.Exec(ctx, query_string, "CANCELLED", workflow_id, cur_time)
 	if err != nil {
 		return fmt.Errorf("Error in updating the task status %w", err)
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return fmt.Errorf("Error in committing transaction %w", err)
 	}
 	return nil
 }

@@ -22,7 +22,7 @@ var (
 	workflowDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "workflow_duration_seconds",
 		Help:    "Time taken to complete an entire DAG",
-		Buckets: []float64{60, 120, 180, 240, 300, 600, 900}, // Default buckets are good for seconds
+		Buckets: []float64{60, 120, 180, 240, 300, 600, 900},
 	}, []string{"status"}) // We can label it "success" or "cancelled"
 )
 
@@ -151,9 +151,14 @@ func (orch *Orchestrator) pullConsumer(ctx context.Context, consumer jetstream.C
 					if len(ready_task) == 0 {
 						isDone, creationTime, err := orch.DbDriver.CheckWorkflowComplete(processContext, workflow_id)
 						if err == nil && isDone {
-							duration := time.Since(creationTime).Seconds()
-							workflowDuration.WithLabelValues("success").Observe(duration)
-							log.Printf("Workflow %s fully completed in %.2f seconds", workflow_id, duration)
+							ok, err := orch.DbDriver.UpdateWorkflowCompletionStatus(processContext, workflow_id)
+							if err != nil {
+								log.Printf("Error in updating workflow completion status %v", err)
+							} else if ok {
+								duration := time.Since(creationTime).Seconds()
+								workflowDuration.WithLabelValues("success").Observe(duration)
+								log.Printf("Workflow %s fully completed in %.2f seconds", workflow_id, duration)
+							}
 						}
 					}
 
@@ -377,7 +382,7 @@ func (orch *Orchestrator) CancelWorkflowHandler(ctx context.Context, workflow_id
 func (orch *Orchestrator) TestTempLogger(ctx context.Context, workflowID uuid.UUID) error {
 	tasksInfo, err := orch.DbDriver.TesttempGettingInfo(ctx, workflowID)
 	if err != nil {
-		log.Println("iteration: failed to get task info: %v", err)
+		log.Printf("iteration: failed to get task info: %v", err)
 		return err
 	}
 
