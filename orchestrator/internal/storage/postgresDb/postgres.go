@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	Graph "github.com/JoYBoy7214/swarm-orchestrator/internal"
-	storage "github.com/JoYBoy7214/swarm-orchestrator/internal/storage"
+	Graph "github.com/JoYBoy7214/DAG-Orchestrator/internal"
+	storage "github.com/JoYBoy7214/DAG-Orchestrator/internal/storage"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

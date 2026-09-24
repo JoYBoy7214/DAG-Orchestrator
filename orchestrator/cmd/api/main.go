@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/JoYBoy7214/swarm-orchestrator/internal/orchestrator"
-	"github.com/JoYBoy7214/swarm-orchestrator/internal/storage"
+	"github.com/JoYBoy7214/DAG-Orchestrator/internal/orchestrator"
+	"github.com/JoYBoy7214/DAG-Orchestrator/internal/storage"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"

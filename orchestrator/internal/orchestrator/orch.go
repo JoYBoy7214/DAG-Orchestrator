@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/JoYBoy7214/swarm-orchestrator/internal/jet_stream"
-	"github.com/JoYBoy7214/swarm-orchestrator/internal/storage/postgresDb"
+	"github.com/JoYBoy7214/DAG-Orchestrator/internal/jet_stream"
+	"github.com/JoYBoy7214/DAG-Orchestrator/internal/storage/postgresDb"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
