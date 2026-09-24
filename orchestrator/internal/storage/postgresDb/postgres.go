@@ -96,16 +96,16 @@ func (pd *PostgresDriver) CreateWorkflow(ctx context.Context) (uuid.UUID, error)
 	}
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx, `INSERT INTO workflow (workflow_id,created_at,status,updated_at) VALUES ($1,DEFAULT,'PENDING',$2)`, workflow_id, current_time)
+	_, err = tx.Exec(ctx, `INSERT INTO workflow (workflow_id,created_at,status,updated_at) VALUES ($1,$2,'PENDING',$3)`, workflow_id, current_time, current_time)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("Error in inserting into workflow %w", err)
 	}
 
 	Q_string_task_insert := `INSERT INTO tasks (workflow_id,task_id,task_type,status,updated_at,created_at)
-							VALUES($1,$2,$3,'PENDING',$4,DEFAULT)`
+							VALUES($1,$2,$3,'PENDING',$4,$5)`
 	for key := range DAG.Nodes {
 		task_id := uuid.New()
-		_, err = tx.Exec(ctx, Q_string_task_insert, workflow_id, task_id, key, current_time)
+		_, err = tx.Exec(ctx, Q_string_task_insert, workflow_id, task_id, key, current_time, current_time)
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("Error in inserting into task table task failed is %s, Error: %w", key, err)
 		}
@@ -210,7 +210,7 @@ func (pd *PostgresDriver) GetAllReadyLongLivedTasks(ctx context.Context) ([]stor
     UPDATE tasks
     SET status = 'READY'
     WHERE status = 'RUNNING' 
-      AND ($1 - updated_at) > INTERVAL '1 minute'
+      AND ($1 - updated_at) > INTERVAL '4 minute'
     RETURNING workflow_id, Task_id, Task_type
 	)
 	SELECT * FROM updated_running_tasks
@@ -218,7 +218,7 @@ func (pd *PostgresDriver) GetAllReadyLongLivedTasks(ctx context.Context) ([]stor
 	SELECT workflow_id, Task_id, Task_type 
 	FROM tasks 
 	WHERE status = 'READY' 
-    AND ($1 - updated_at) > INTERVAL '1 minute'; `
+    AND ($1 - updated_at) > INTERVAL '4 minute'; `
 	rows, err := pd.pool.Query(ctx, query_string, cur_time)
 	if err != nil {
 		return nil, fmt.Errorf("Error in getting the long lived ready rows  %w", err)
@@ -278,7 +278,7 @@ func (pd *PostgresDriver) UpdateWorkflowStatus(ctx context.Context, workflow_id 
 }
 
 func (pd *PostgresDriver) DeleteWorkflow(ctx context.Context, workflow_id uuid.UUID) error {
-	err := pd.UpdateWorkflowStatus(ctx, workflow_id, "DELETED")
+	err := pd.UpdateWorkflowStatus(ctx, workflow_id, "CANCELLED")
 	if err != nil {
 		return fmt.Errorf("Error in deleting workflow %w", err)
 	}
@@ -288,11 +288,27 @@ func (pd *PostgresDriver) DeleteWorkflow(ctx context.Context, workflow_id uuid.U
 	set status =$1,updated_at =$3
 	where workflow_id=$2 and status != 'COMPLETED'
 	`
-	_, err = pd.pool.Exec(ctx, query_string, "DELETED", workflow_id, cur_time)
+	_, err = pd.pool.Exec(ctx, query_string, "CANCELLED", workflow_id, cur_time)
 	if err != nil {
 		return fmt.Errorf("Error in updating the task status %w", err)
 	}
 	return nil
+}
+
+func (pd *PostgresDriver) CheckWorkflowComplete(ctx context.Context, workflow_id uuid.UUID) (bool, time.Time, error) {
+	var creationTime time.Time
+	query_string := `
+	SELECT created_at FROM workflow WHERE workflow_id = $1 AND NOT EXISTS (
+		SELECT 1 FROM tasks WHERE workflow_id = $1 AND status != 'COMPLETED'
+	);`
+	err := pd.pool.QueryRow(ctx, query_string, workflow_id).Scan(&creationTime)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, time.Time{}, nil // Workflow is not complete
+		}
+		return false, time.Time{}, fmt.Errorf("Error in checking workflow completion %w", err)
+	}
+	return true, creationTime, nil // Workflow is complete
 }
 
 func (pd *PostgresDriver) TesttempGettingInfo(ctx context.Context, workflow_id uuid.UUID) ([]Temp, error) {

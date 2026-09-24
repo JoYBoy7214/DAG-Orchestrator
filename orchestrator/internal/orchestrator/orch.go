@@ -14,6 +14,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	workflowDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "workflow_duration_seconds",
+		Help:    "Time taken to complete an entire DAG",
+		Buckets: []float64{60, 120, 180, 240, 300, 600, 900}, // Default buckets are good for seconds
+	}, []string{"status"}) // We can label it "success" or "cancelled"
 )
 
 type Orchestrator struct {
@@ -136,6 +146,15 @@ func (orch *Orchestrator) pullConsumer(ctx context.Context, consumer jetstream.C
 					if err != nil {
 						log.Println("Error in Evaluating DAG %w", err)
 						return
+					}
+
+					if len(ready_task) == 0 {
+						isDone, creationTime, err := orch.DbDriver.CheckWorkflowComplete(processContext, workflow_id)
+						if err == nil && isDone {
+							duration := time.Since(creationTime).Seconds()
+							workflowDuration.WithLabelValues("success").Observe(duration)
+							log.Printf("Workflow %s fully completed in %.2f seconds", workflow_id, duration)
+						}
 					}
 
 					err = orch.TestTempLogger(processContext, workflow_id)

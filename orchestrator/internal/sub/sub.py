@@ -34,10 +34,10 @@ async def worker_task(worker_id, js, stop_event,nats):
 
                 for msg in msgs:
                     try:
-                        if random.random() < 0.3:
-                            print("Chaos Monkey: Simulating sudden worker crash!")
-                            # Do NOT ack. Just drop the message and continue the loop.
-                            continue
+                        # if random.random() < 0.3:
+                        #     print("Chaos Monkey: Simulating sudden worker crash!")
+                        #     # Do NOT ack. Just drop the message and continue the loop.
+                        #     continue
                         d = json.loads(msg.data)
                         workflow_id = d.get("Workflow_id")
                         task_id = d.get("Task_id")
@@ -80,7 +80,7 @@ async def worker_task(worker_id, js, stop_event,nats):
 
                         
                         # --- Simulate task execution ---
-                        rand_int = random.randint(15, 20)
+                        rand_int = 2
                         logger.info(f"Worker {worker_id} processing Task: {task_id} (Type: {task_type}) (excution time: {rand_int})")
                         
                         await asyncio.sleep(rand_int)
@@ -183,7 +183,7 @@ async def main():
             pass 
 
     # --- Start Concurrent Workers ---
-    NUM_WORKERS = 5
+    NUM_WORKERS = 50
     workers = []
     
     for i in range(NUM_WORKERS):

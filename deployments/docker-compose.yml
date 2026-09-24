@@ -20,6 +20,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_Db:/var/lib/postgresql/data
+    networks:
+      - ai_pipeline 
 
   worker:
     build:
