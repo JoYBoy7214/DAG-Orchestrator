@@ -9,4 +9,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-CMD ["python", "sub.py"]
+CMD ["python", "worker.py"]

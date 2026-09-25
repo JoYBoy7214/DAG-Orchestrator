@@ -55,7 +55,7 @@ async def worker_task(worker_id, js, stop_event,nats):
                         try:
                             async with session.request(
                                 "PATCH",
-                                f"http://localhost:8080/api/v1/tasks/{task_id}",
+                                f"http://orch:8080/api/v1/tasks/{task_id}",
                                 json=payload,
                                 timeout=aiohttp.ClientTimeout(total=2),
                             ) as resp:
@@ -154,7 +154,7 @@ async def cancel_listener(nats,stop_event,current_tasks,workflow_map):
 async def main():
     nc = NATS()
     try:
-        await nc.connect("localhost:4222", connect_timeout=30)
+        await nc.connect("nats://nats:4222", connect_timeout=30)
     except Exception as e:
         logger.error(f"Error connecting to NATS: {e}")
         return

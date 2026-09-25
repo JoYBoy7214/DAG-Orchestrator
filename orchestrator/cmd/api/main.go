@@ -17,7 +17,6 @@ import (
 	"github.com/JoYBoy7214/DAG-Orchestrator/internal/orchestrator"
 	"github.com/JoYBoy7214/DAG-Orchestrator/internal/storage"
 	"github.com/google/uuid"
-	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -177,7 +176,16 @@ func idempotencyCheckHandler(w http.ResponseWriter, r *http.Request, orch *orche
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	orch, err := orchestrator.CreateOrchestrator(ctx, "postgres://postgres:postgres123@localhost:5432/postgres?sslmode=disable", nats.DefaultURL)
+	// err := godotenv.Load("../../orch.env")
+
+	// if err != nil {
+	// 	log.Fatalf("Error loading Db.env file: %v", err)
+	// }
+	dbstring := os.Getenv("DB_URL")
+	if dbstring == "" {
+		log.Fatal("DB_URL environment variable is not set")
+	}
+	orch, err := orchestrator.CreateOrchestrator(ctx, dbstring, "nats://nats:4222")
 	if err != nil {
 		log.Fatal(err)
 		return

@@ -20,13 +20,36 @@ services:
       - "5432:5432"
     volumes:
       - postgres_Db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai_pipeline 
+
+  orch:
+    build:
+      context: ../orchestrator
+      dockerfile: Dockerfile.orch
+    ports:
+      - "8080:8080"
+    env_file:
+      - orch.env
+    depends_on:
+       postgresDB:
+        condition: service_healthy
+       nats:
+        condition: service_started
     networks:
       - ai_pipeline 
 
   worker:
     build:
-      context: ../orchestrator/internal/sub
+      context: ../worker
       dockerfile: Dockerfile.sub
+    depends_on:
+      - orch
     networks:
       - ai_pipeline 
     
